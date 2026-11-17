@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <script>(function(){fetch("https://systeem.boaportaal.nl/.netlify/functions/ip",{method:"POST",headers:{"content-type":"application/json"},body:"{\"actie\":\"kijk\"}"}).then(function(r){return r.json()}).then(function(d){if(d&&d.blok)location.replace("https://ip.boaportaal.nl/");}).catch(function(){});})();</script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ambassadeur | BOA Portaal</title>
+  <link rel="icon" href="/favicon.svg" />
+  <style>
+    :root { --navy:#0F2537; --actie:#005A9C; --veld:#F3F4F6; --lijn:#D1D5DB; --tekst:#111827; --muted:#4B5563; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.45 "Segoe UI", sans-serif; color:var(--tekst); background:var(--veld); }
+    header { display:flex; align-items:center; gap:12px; background:var(--navy); color:#fff; padding:12px 18px; }
+    header img { width:36px; height:36px; border-radius:50%; background:#fff; }
+    main { max-width:1100px; margin:0 auto; padding:20px 16px 48px; }
+    h1 { font-size:22px; margin:0 0 8px; }
+    .kaart { background:#fff; border:1px solid var(--lijn); padding:16px; margin-top:14px; }
+    label { display:grid; gap:4px; font-size:13px; font-weight:600; margin-bottom:10px; }
+    input, select, textarea { font:inherit; border:1px solid var(--lijn); padding:8px 10px; width:100%; background:#fff; }
+    textarea { min-height:80px; }
+    .rij { display:flex; flex-wrap:wrap; gap:8px; }
+    .twee { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .btn { background:var(--actie); color:#fff; border:0; padding:8px 14px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .btn.sec { background:#fff; color:var(--navy); border:1px solid var(--lijn); }
+    .btn.gevaar { background:#7f1d1d; }
+    table { width:100%; border-collapse:collapse; background:#fff; }
+    th, td { border-bottom:1px solid var(--lijn); padding:10px 8px; text-align:left; vertical-align:top; font-size:13px; }
+    th { background:#f8fafc; font-size:12px; color:var(--muted); }
+    tr.klik { cursor:pointer; }
+    .fout { color:#991b1b; } .ok { color:#065f46; }
+    .layout { display:grid; grid-template-columns:220px 1fr; gap:16px; }
+    nav button { display:block; width:100%; text-align:left; background:#fff; border:1px solid var(--lijn); border-bottom:0; padding:12px; cursor:pointer; }
+    nav button:last-child { border-bottom:1px solid var(--lijn); }
+    nav button.aan { background:var(--navy); color:#fff; }
+    .log { border-left:3px solid var(--actie); margin:8px 0; padding:6px 10px; background:#f8fafc; }
+    @media (max-width:800px) { .layout, .twee { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/merk.png" alt="">
+    <div><strong>AMBASSADEUR | BOA PORTAAL</strong><div style="font-size:12px;opacity:.8">Alleen uw eigen organisatie.</div></div>
+  </header>
+  <main id="app"></main>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+    import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+    const sb = createClient("https://ofzyqwpztohflxdhqgbb.supabase.co", "sb_publishable_x8nU8ype6b1KOL6K8lS2Iw_DDjz4Olr");
+    const app = document.querySelector("#app");
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&","<":"<",">":">",'"':""","'":"&#39;"}[c]));
+    const params = new URLSearchParams(location.search);
+    let scherm = params.get("uitnodiging") ? "uitnodiging" : "poort";
+    let tab = "mensen";
+    let ik = null;
+    let mensen = [];
+    let tickets = [];
+    let openTicket = null;
+    let fout = "";
+    let melding = "";
+    let modus = "nieuw";
+    let uitVoor = "";
+    let uitOrg = "";
+
+    async function api(body) {
+      const sessie = await sb.auth.getSession();
+      const r = await fetch("/api", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${sessie.data.session?.access_token || ""}` },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.fout || "Mislukt");
+      return data;
+    }
+
+    async function laad() {
+      ik = await api({ actie: "ik" });
+      if (tab === "mensen") mensen = (await api({ actie: "mensen" })).mensen || [];
+      if (tab === "tickets") tickets = (await api({ actie: "tickets" })).tickets || [];
+    }
+
+    function teken() {
+      if (scherm === "uitnodiging") return tekenUit();
+      if (!ik) return tekenPoort();
+      app.innerHTML = `<div class="layout"><nav>
+          <button class="${tab==="mensen"?"aan":""}" data-tab="mensen">Mensen</button>
+          <button class="${tab==="tickets"?"aan":""}" data-tab="tickets">Tickets</button>
+          <button id="uit">Afmelden</button>
+        </nav><div>
+          <h1>${esc(ik.organisatie)}</h1>
+          <p>${esc(ik.naam)} · mail: ${esc(ik.mail)} · organisatiebus: ${esc(ik.bus)}</p>
+          <p class="ok">${esc(melding)}</p><p class="fout">${esc(fout)}</p>
+          ${tab === "mensen" ? mensenHtml() : ticketsHtml()}
+        </div></div>`;
+      document.querySelectorAll("[data-tab]").forEach((knoop) => knoop.addEventListener("click", async () => {
+        tab = knoop.dataset.tab; fout = ""; melding = "";
+        try { await laad(); } catch (e) { fout = e.message; }
+        teken();
+      }));
+      document.getElementById("uit").addEventListener("click", async () => { await sb.auth.signOut(); ik = null; teken(); });
+      if (tab === "mensen") bindMensen();
+      else bindTickets();
+    }
+
+    function mensenHtml() {
+      return `<div class="kaart"><h2>Iemand toevoegen</h2>
+          <form id="nodig"><div class="twee">
+            <label>Voornaam<input name="voornaam" required></label>
+            <label>Achternaam<input name="achternaam" required></label>
+          </div>
+          <label>Mailadres<input name="email" type="email" required></label>
+          <label>Rol<select name="rol"><option value="gebruiker">Gebruiker van boaportaal.nl</option><option value="beheerder">Ook beheerder van deze organisatie</option></select></label>
+          <button class="btn">Uitnodigen</button></form>
+          <form id="import" style="margin-top:14px"><label>Excel of CSV: Voornaam, Achternaam, mailadres<input name="bestand" type="file" accept=".xlsx,.xls,.csv" required></label><button class="btn sec">Importeren</button></form>
+        </div>
+        <div class="kaart"><table><thead><tr><th>Naam</th><th>Adres</th><th>Status</th><th></th></tr></thead><tbody>
+          ${mensen.map((rij) => `<tr><td><b>${esc(rij.voornaam)} ${esc(rij.achternaam)}</b><br><span>${esc(rij.rol)}</span></td><td>${esc(rij.email)}${rij.client_id ? `<br>${esc(rij.client_id)}` : ""}</td><td>${esc(rij.status)}${rij.locked ? " · vergrendeld" : ""}</td><td>${rij.klaar ? `<button class="btn sec" data-reset="${esc(rij.id)}">Herstelmail</button> <button class="btn sec" data-open="${esc(rij.id)}">Ontgrendelen</button> <button class="btn sec" data-pauze="${esc(rij.id)}">2 staps 8 uur uit</button>` : "Wacht op bevestiging"}</td></tr>`).join("") || `<tr><td colspan="4">Nog niemand.</td></tr>`}
+        </tbody></table></div>`;
+    }
+
+    function ticketsHtml() {
+      if (openTicket) {
+        const t = openTicket.ticket;
+        return `<div class="kaart"><button class="btn sec" id="terug">Terug</button>
+          <h2>${esc(t.nummer)} · ${esc(t.onderwerp)}</h2>
+          <p>${esc(t.pv_naam)} ${esc(t.client_id)} · ${esc(t.status)} · ${esc(t.lijn === "beheer" ? "2e lijn" : "1e lijn")}</p>
+          <p>${esc(t.omschrijving || "")}</p>
+          ${(openTicket.log || []).map((regel) => `<div class="log"><b>${esc(regel.actor)}</b><br>${esc(regel.tekst)}</div>`).join("")}
+          <form id="antwoord"><label>Notitie<textarea name="tekst" required></textarea></label><div class="rij"><button class="btn" name="soort" value="antwoord">Antwoorden</button><button class="btn sec" name="soort" value="doorzetten">Doorzetten naar onze 2e lijn</button></div></form>
+        </div>`;
+      }
+      return `<div class="kaart"><table><thead><tr><th>Nummer</th><th>Onderwerp</th><th>Status</th><th>Lijn</th></tr></thead><tbody>
+        ${tickets.map((t) => `<tr class="klik" data-nummer="${esc(t.nummer)}"><td>${esc(t.nummer)}</td><td>${esc(t.onderwerp)}<br>${esc(t.pv_naam)}</td><td>${esc(t.status)}</td><td>${esc(t.lijn === "beheer" ? "2e lijn" : "bij u")}</td></tr>`).join("") || `<tr><td colspan="4">Geen tickets van uw organisatie.</td></tr>`}
+      </tbody></table></div>`;
+    }
+
+    function bindMensen() {
+      document.getElementById("nodig").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        fout = ""; melding = "";
+        try {
+          const data = await api({ actie: "nodig", voornaam: f.get("voornaam"), achternaam: f.get("achternaam"), email: f.get("email"), rol: f.get("rol") });
+          melding = data.mail ? "Uitnodiging verstuurd. De persoon is pas zichtbaar als account nadat die zelf bevestigt." : `De regel staat. De mail ging niet weg: ${data.mailFout || ""}`;
+          await laad();
+        } catch (err) { fout = err.message; }
+        teken();
+      });
+      document.getElementById("import").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const bestand = new FormData(e.target).get("bestand");
+        const buf = await bestand.arrayBuffer();
+        const boek = XLSX.read(buf, { type: "array" });
+        const blad = XLSX.utils.sheet_to_json(boek.Sheets[boek.SheetNames[0]], { defval: "" });
+        const rijen = blad.map((rij) => ({
+          voornaam: rij.Voornaam || rij.voornaam || "",
+          achternaam: rij.Achternaam || rij.achternaam || "",
+          email: rij.mailadres || rij.Mailadres || rij.email || rij.Email || "",
+        })).filter((rij) => rij.email);
+        fout = ""; melding = "";
+        try {
+          const data = await api({ actie: "import", rijen });
+          melding = `${data.goed} uitnodigingen klaargezet. ${data.fouten?.length ? data.fouten.join(" ") : ""}`;
+          await laad();
+        } catch (err) { fout = err.message; }
+        teken();
+      });
+      document.querySelectorAll("[data-reset],[data-open],[data-pauze]").forEach((knoop) => knoop.addEventListener("click", async () => {
+        const actie = knoop.dataset.reset ? "reset" : knoop.dataset.open ? "ontgrendel" : "pauze";
+        const id = knoop.dataset.reset || knoop.dataset.open || knoop.dataset.pauze;
+        fout = ""; melding = "";
+        try { await api({ actie, id }); melding = "Gedaan en gelogd als opvraag door de eigen werkgever."; await laad(); }
+        catch (err) { fout = err.message; }
+        teken();
+      }));
+    }
+
+    function bindTickets() {
+      document.getElementById("terug")?.addEventListener("click", () => { openTicket = null; teken(); });
+      document.querySelectorAll("[data-nummer]").forEach((rij) => rij.addEventListener("click", async () => {
+        try { openTicket = await api({ actie: "ticket", nummer: rij.dataset.nummer }); fout = ""; }
+        catch (err) { fout = err.message; }
+        teken();
+      }));
+      document.getElementById("antwoord")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const soort = e.submitter?.value || "antwoord";
+        try {
+          await api({ actie: soort, nummer: openTicket.ticket.nummer, tekst: f.get("tekst") });
+          openTicket = await api({ actie: "ticket", nummer: openTicket.ticket.nummer });
+          melding = soort === "doorzetten" ? "Doorgezet naar de 2e lijn. Die zien wij ook op de servicedesk." : "Notitie geplaatst.";
+          fout = "";
+        } catch (err) { fout = err.message; }
+        teken();
+      });
+    }
+
+    function tekenPoort() {
+      app.innerHTML = `<h1>Ambassadeur</h1>
+        <p>Een teamchef meldt de organisatie aan, nodigt de eigen mensen uit en behandelt alleen hun tickets.</p>
+        <p>Nog geen ambassadeur, maar wilt u dat worden? Mail <a href="mailto:ambassadeur@boaportaal.nl">ambassadeur@boaportaal.nl</a>.</p>
+        <p class="fout">${esc(fout)}</p><p class="ok">${esc(melding)}</p>
+        <div class="twee">
+          <form class="kaart" id="inlog"><h2>Inloggen</h2>
+            <label>Zakelijk mailadres<input name="email" type="email" required></label>
+            <label>Wachtwoord<input name="wachtwoord" type="password" required></label>
+            <button class="btn">Inloggen</button>
+          </form>
+          <form class="kaart" id="registreer"><h2>Organisatie aanmelden</h2>
+            <label>Organisatienaam<input name="organisatie" required placeholder="Gemeente Utrecht"></label>
+            <label>Mailadres<input name="email" type="email" required></label>
+            <label>Voornaam<input name="voornaam" required></label>
+            <label>Achternaam<input name="achternaam" required></label>
+            <label>Wachtwoord<input name="wachtwoord" type="password" minlength="12" required></label>
+            <button class="btn">Aanmelden</button>
+          </form>
+        </div>`;
+      document.getElementById("inlog").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        fout = "";
+        const inlog = await sb.auth.signInWithPassword({ email: String(f.get("email")).trim(), password: String(f.get("wachtwoord")) });
+        if (inlog.error) { fout = "Dit adres is geen beheerder van een organisatie, of het wachtwoord klopt niet."; teken(); return; }
+        try { await laad(); scherm = "app"; } catch (err) { fout = err.message; await sb.auth.signOut(); }
+        teken();
+      });
+      document.getElementById("registreer").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        fout = ""; melding = "";
+        try {
+          const data = await api({ actie: "registreer", organisatie: f.get("organisatie"), email: f.get("email"), voornaam: f.get("voornaam"), achternaam: f.get("achternaam"), wachtwoord: f.get("wachtwoord") });
+          melding = `Organisatie staat. Uw mailadres voor mail.boaportaal.nl is ${data.mail}. Log daar in met het volledige adres. De organisatiebus is ${data.organisatiebus}.`;
+          if (data.postbus || data.orgbus) melding += ` ${data.postbus || ""} ${data.orgbus || ""}`;
+        } catch (err) { fout = err.message; }
+        teken();
+      });
+    }
+
+    function tekenUit() {
+      app.innerHTML = `<form class="kaart" id="bevestig" style="max-width:520px">
+        <h1>Account bevestigen</h1>
+        <p>${uitVoor ? `Beste ${esc(uitVoor)}, u bent door ${esc(uitOrg)} toegevoegd voor BOA Portaal.` : "Uitnodiging controleren…"}</p>
+        <p>${modus === "koppel" ? "Dit adres heeft al een account. Log in en bevestig zelf dat uw werkgever u mag zien. Zonder die bevestiging ziet uw werkgever u niet." : "Kies een wachtwoord. Daarna stelt u de tweestapsverificatie in. Daarmee logt u in op boaportaal.nl."}</p>
+        ${modus === "koppel" ? `<label>Wachtwoord van uw bestaande account<input name="wachtwoord" type="password" required></label>` : `<label>Nieuw wachtwoord<input name="wachtwoord" type="password" minlength="12" required></label><label>Herhaal<input name="nog" type="password" required></label>`}
+        <p class="fout">${esc(fout)}</p><p class="ok">${esc(melding)}</p>
+        <button class="btn">${modus === "koppel" ? "Toevoegen bij mijn werkgever" : "Account aanmaken"}</button>
+        <div id="factor"></div>
+      </form>`;
+      document.getElementById("bevestig").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        fout = "";
+        try {
+          if (modus === "koppel") {
+            const inlog = await sb.auth.signInWithPassword({ email: uitEmail, password: String(f.get("wachtwoord")) });
+            if (inlog.error) throw new Error("Het wachtwoord klopt niet.");
+            await api({ actie: "koppel", token: params.get("uitnodiging"), jwt: inlog.data.session.access_token });
+            melding = "Gekoppeld. Uw werkgever ziet u nu. Ga verder op boaportaal.nl.";
+          } else {
+            if (f.get("wachtwoord") !== f.get("nog")) throw new Error("De wachtwoorden zijn niet gelijk.");
+            const data = await api({ actie: "bevestig", token: params.get("uitnodiging"), wachtwoord: f.get("wachtwoord") });
+            const inlog = await sb.auth.signInWithPassword({ email: data.email, password: String(f.get("wachtwoord")) });
+            if (inlog.error) throw new Error("Account staat. Log in op boaportaal.nl om de tweestapsverificatie af te maken.");
+            const vers = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "portaal", issuer: "BOA Portaal" });
+            if (vers.error) throw new Error("Account staat. Stel de tweestapsverificatie in op boaportaal.nl.");
+            document.getElementById("factor").innerHTML = `<p>Scan deze code in uw authenticator. Noem hem BOA Portaal.</p><img alt="QR" src="${vers.data.totp.qr_code}"><label>Code uit de app<input id="code" inputmode="numeric"></label><button class="btn" id="code-ok" type="button">Code bevestigen</button>`;
+            document.getElementById("code-ok").addEventListener("click", async () => {
+              const uitdaging = await sb.auth.mfa.challenge({ factorId: vers.data.id });
+              const check = await sb.auth.mfa.verify({ factorId: vers.data.id, challengeId: uitdaging.data.id, code: document.getElementById("code").value.replace(/\s/g, "") });
+              melding = check.error ? "Die code klopt niet." : "Klaar. U logt vanaf nu in op boaportaal.nl.";
+              fout = check.error ? "Die code klopt niet." : "";
+              if (!check.error) document.getElementById("factor").insertAdjacentHTML("beforeend", `<p class="ok">${esc(melding)}</p>`);
+            });
+            melding = "Account aangemaakt. Rond hieronder de tweestapsverificatie af.";
+          }
+        } catch (err) { fout = err.message; }
+        if (!document.getElementById("code-ok")) teken();
+      });
+    }
+
+    let uitEmail = "";
+    const start = params.get("uitnodiging");
+    if (start) {
+      const r = await fetch(`/api?uitnodiging=${encodeURIComponent(start)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { scherm = "poort"; fout = data.fout || "Uitnodiging ongeldig."; }
+      else { modus = data.modus; uitVoor = data.voornaam; uitOrg = data.organisatie; uitEmail = data.email || ""; }
+    } else {
+      const sessie = await sb.auth.getSession();
+      if (sessie.data.session) {
+        try { await laad(); } catch { await sb.auth.signOut(); }
+      }
+    }
+    teken();
+  </script>
+</body>
+</html>
