@@ -44,10 +44,9 @@
   <main id="app"></main>
   <script type="module">
     import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-    import * as XLSX from "https://esm.sh/xlsx@0.18.5";
     const sb = createClient("https://ofzyqwpztohflxdhqgbb.supabase.co", "sb_publishable_x8nU8ype6b1KOL6K8lS2Iw_DDjz4Olr");
     const app = document.querySelector("#app");
-    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&","<":"<",">":">",'"':""","'":"&#39;"}[c]));
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
     const params = new URLSearchParams(location.search);
     let scherm = params.get("uitnodiging") ? "uitnodiging" : "poort";
     let tab = "mensen";
@@ -149,6 +148,8 @@
       document.getElementById("import").addEventListener("submit", async (e) => {
         e.preventDefault();
         const bestand = new FormData(e.target).get("bestand");
+        const mod = await import("https://esm.sh/xlsx@0.18.5");
+        const XLSX = mod.default || mod;
         const buf = await bestand.arrayBuffer();
         const boek = XLSX.read(buf, { type: "array" });
         const blad = XLSX.utils.sheet_to_json(boek.Sheets[boek.SheetNames[0]], { defval: "" });
@@ -281,19 +282,23 @@
     }
 
     let uitEmail = "";
-    const start = params.get("uitnodiging");
-    if (start) {
-      const r = await fetch(`/api?uitnodiging=${encodeURIComponent(start)}`);
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) { scherm = "poort"; fout = data.fout || "Uitnodiging ongeldig."; }
-      else { modus = data.modus; uitVoor = data.voornaam; uitOrg = data.organisatie; uitEmail = data.email || ""; }
-    } else {
-      const sessie = await sb.auth.getSession();
-      if (sessie.data.session) {
-        try { await laad(); } catch { await sb.auth.signOut(); }
+    try {
+      const start = params.get("uitnodiging");
+      if (start) {
+        const r = await fetch(`/api?uitnodiging=${encodeURIComponent(start)}`);
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) { scherm = "poort"; fout = data.fout || "Uitnodiging ongeldig."; }
+        else { modus = data.modus; uitVoor = data.voornaam; uitOrg = data.organisatie; uitEmail = data.email || ""; }
+      } else {
+        const sessie = await sb.auth.getSession();
+        if (sessie.data.session) {
+          try { await laad(); } catch { await sb.auth.signOut(); }
+        }
       }
+      teken();
+    } catch (err) {
+      app.textContent = err && err.message ? err.message : "De pagina kon niet starten.";
     }
-    teken();
   </script>
 </body>
 </html>
