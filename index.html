@@ -230,6 +230,7 @@
             <label>Voornaam<input name="voornaam" required></label>
             <label>Achternaam<input name="achternaam" required></label>
             <label>Wachtwoord<input name="wachtwoord" type="password" minlength="12" required></label>
+            <p>De mailserver eist minstens 30 dagen kraaktijd. Een lange zin van vier willekeurige woorden haalt dat. Een kort of bekend wachtwoord niet.</p>
             <button class="btn">Aanmelden</button>
           </form>
         </div>`;
@@ -263,7 +264,7 @@
         <h1>Account bevestigen</h1>
         <p>${uitVoor ? `Beste ${esc(uitVoor)}, u bent door ${esc(uitOrg)} toegevoegd voor BOA Portaal.` : "Uitnodiging controleren…"}</p>
         <p>${modus === "koppel" ? "Dit adres heeft al een account. Log in en bevestig zelf dat uw werkgever u mag zien. Zonder die bevestiging ziet uw werkgever u niet." : "Kies een wachtwoord. Daarna stelt u de tweestapsverificatie in. Daarmee logt u in op boaportaal.nl."}</p>
-        ${modus === "koppel" ? `<label>Wachtwoord van uw bestaande account<input name="wachtwoord" type="password" required></label>` : `<label>Nieuw wachtwoord<input name="wachtwoord" type="password" minlength="12" required></label><label>Herhaal<input name="nog" type="password" required></label>`}
+        ${modus === "koppel" ? `<label>Wachtwoord van uw bestaande account<input name="wachtwoord" type="password" required></label>` : `<label>Nieuw wachtwoord<input name="wachtwoord" type="password" minlength="12" required></label><p>De mailserver eist minstens 30 dagen kraaktijd. Gebruik een lange zin van vier willekeurige woorden.</p><label>Herhaal<input name="nog" type="password" required></label>`}
         <p class="fout">${esc(fout)}</p><p class="ok">${esc(melding)}</p>
         <button class="btn">${modus === "koppel" ? "Toevoegen bij mijn werkgever" : "Account aanmaken"}</button>
         <div id="factor"></div>

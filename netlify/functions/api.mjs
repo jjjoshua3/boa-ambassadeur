@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "node:crypto";
+import zxcvbn from "zxcvbn";
 
 const URL = process.env.SUPABASE_URL || "https://ofzyqwpztohflxdhqgbb.supabase.co";
 const SLEUTEL = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -39,6 +40,15 @@ function mailLocal(voor, achter) {
 
 function token() {
   return randomBytes(24).toString("base64url");
+}
+
+function wachtwoordFout(password, extra = []) {
+  const tekst = String(password || "");
+  if (tekst.length < 12) return "Kies een wachtwoord van minstens 12 tekens.";
+  const score = zxcvbn(tekst, extra.map((deel) => String(deel || "")).filter((deel) => deel.length > 1));
+  const dagen = Math.floor(Number(score?.crack_times_seconds?.offline_fast_hashing_1e10_per_second || 0) / 86400);
+  if (dagen < 30) return `Dit wachtwoord is te makkelijk voor de mailserver. Die eist minstens 30 dagen kraaktijd. Dit wachtwoord zit op ${dagen} dagen. Gebruik een lange zin van minstens vier willekeurige woorden.`;
+  return "";
 }
 
 function geheim() {
@@ -231,8 +241,9 @@ export async function handler(event) {
     const password = String(body.wachtwoord || "");
     const slug = stuk(naam);
     const local = mailLocal(voornaam, achternaam);
-    if (naam.length < 2 || !email || !local || password.length < 12) {
-      return antwoord(400, { fout: "Vul organisatie, zakelijk mailadres, voornaam, achternaam en een wachtwoord van minstens 12 tekens in." });
+    const zwak = wachtwoordFout(password, [voornaam, achternaam, email, naam]);
+    if (naam.length < 2 || !email || !local || zwak) {
+      return antwoord(400, { fout: zwak || "Vul organisatie, zakelijk mailadres, voornaam, achternaam en een wachtwoord van minstens 12 tekens in." });
     }
     const bezet = await client.from("boa_organisatie").select("id").eq("slug", slug).maybeSingle();
     if (bezet.data) return antwoord(409, { fout: "Deze organisatienaam is al aangemeld." });
@@ -269,7 +280,8 @@ export async function handler(event) {
     const bestaand = await zoekGebruiker(client, lid.email);
     if (bestaand) return antwoord(409, { fout: "Dit adres heeft al een account. Log in en kies zelf toevoegen bij de werkgever." });
     const password = String(body.wachtwoord || "");
-    if (password.length < 12) return antwoord(400, { fout: "Kies een wachtwoord van minstens 12 tekens." });
+    const zwak = wachtwoordFout(password, [lid.voornaam, lid.achternaam, lid.email]);
+    if (zwak) return antwoord(400, { fout: zwak });
     const gemaakt = await client.auth.admin.createUser({
       email: lid.email,
       password,
