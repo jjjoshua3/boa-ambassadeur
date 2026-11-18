@@ -78,17 +78,30 @@ async function wie(event, client) {
 
 async function postbus({ local, password, domain }) {
   const tokenApi = process.env.PURELYMAIL_API_TOKEN || "";
-  const userName = `${local}@${domain}`;
+  const naam = String(local || "").trim().toLowerCase();
+  const domein = domain || "boaportaal.nl";
+  const adres = `${naam}@${domein}`;
   if (!tokenApi) return { ok: false, fout: "PURELYMAIL_API_TOKEN ontbreekt. Maak de postbus handmatig aan." };
+  if (!/^[a-z0-9][a-z0-9._-]{0,62}$/.test(naam)) return { ok: false, fout: "Die postbusnaam kan niet als mailadres." };
+  const headers = { "Content-Type": "application/json", "Purelymail-Api-Token": tokenApi };
   const res = await fetch("https://purelymail.com/api/v0/createUser", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Purelymail-Api-Token": tokenApi },
-    body: JSON.stringify({ userName, domainName: domain, password, enablePasswordReset: false, recoveryEnabled: false, enableSearchIndexing: false, sendWelcomeEmail: false }),
+    headers,
+    body: JSON.stringify({ userName: naam, domainName: domein, password, enablePasswordReset: false, sendWelcomeEmail: false }),
   });
   const data = await res.json().catch(() => ({}));
-  if (res.ok) return { ok: true, adres: userName };
+  if (res.ok) return { ok: true, adres };
   const tekst = JSON.stringify(data);
-  if (/exist|already/i.test(tekst)) return { ok: true, adres: userName, bestond: true };
+  if (/exist|already/i.test(tekst)) {
+    const wijzig = await fetch("https://purelymail.com/api/v0/modifyUser", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ userName: adres, newPassword: password, enablePasswordReset: false }),
+    });
+    if (wijzig.ok) return { ok: true, adres };
+    const fout = await wijzig.json().catch(() => ({}));
+    return { ok: false, fout: fout?.message || "De postbus bestond al en het wachtwoord is niet gezet." };
+  }
   return { ok: false, fout: data?.message || data?.code || "Postbus niet aangemaakt." };
 }
 

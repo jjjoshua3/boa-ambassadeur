@@ -232,8 +232,11 @@
         fout = ""; melding = "";
         try {
           const data = await api({ actie: "registreer", organisatie: f.get("organisatie"), email: f.get("email"), voornaam: f.get("voornaam"), achternaam: f.get("achternaam"), wachtwoord: f.get("wachtwoord") });
-          melding = `Organisatie staat. Uw mailadres voor mail.boaportaal.nl is ${data.mail}. Log daar in met het volledige adres. De organisatiebus is ${data.organisatiebus}.`;
-          if (data.postbus || data.orgbus) melding += ` ${data.postbus || ""} ${data.orgbus || ""}`;
+          if (data.postbus || data.orgbus) {
+            melding = `De organisatie staat, maar de postbus is niet aangemaakt. ${data.postbus || ""} ${data.orgbus || ""}`.trim();
+          } else {
+            melding = `Organisatie staat. Uw mailadres voor mail.boaportaal.nl is ${data.mail}. Log daar in met het volledige adres en hetzelfde wachtwoord. De organisatiebus is ${data.organisatiebus}.`;
+          }
         } catch (err) { fout = err.message; }
         teken();
       });
