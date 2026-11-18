@@ -89,6 +89,11 @@
         </nav><div>
           <h1>${esc(ik.organisatie)}</h1>
           <p>${esc(ik.naam)} · mail: ${esc(ik.mail)} · organisatiebus: ${esc(ik.bus)}</p>
+          <form id="nieuw-wachtwoord" class="kaart"><h2>Wachtwoord voor de mail</h2>
+            <p>De mailserver eist minstens 30 dagen kraaktijd. Gebruik een lange zin van vier willekeurige woorden. Daarna logt u met dat wachtwoord in op mail.boaportaal.nl.</p>
+            <label>Nieuw wachtwoord<input name="wachtwoord" type="password" minlength="12" required autocomplete="new-password"></label>
+            <button class="btn">Wachtwoord zetten</button>
+          </form>
           <p class="ok">${esc(melding)}</p><p class="fout">${esc(fout)}</p>
           ${tab === "mensen" ? mensenHtml() : ticketsHtml()}
         </div></div>`;
@@ -98,6 +103,15 @@
         teken();
       }));
       document.getElementById("uit").addEventListener("click", async () => { await sb.auth.signOut(); ik = null; teken(); });
+      document.getElementById("nieuw-wachtwoord").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        fout = ""; melding = "";
+        try {
+          await api({ actie: "wachtwoord-zet", wachtwoord: new FormData(e.target).get("wachtwoord") });
+          melding = "Wachtwoord gezet. Log daarmee in op mail.boaportaal.nl, met het volledige adres.";
+        } catch (err) { fout = err.message; }
+        teken();
+      });
       if (tab === "mensen") bindMensen();
       else bindTickets();
     }

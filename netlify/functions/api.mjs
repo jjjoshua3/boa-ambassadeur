@@ -337,6 +337,15 @@ export async function handler(event) {
   const ctx = await wie(event, client);
   if (!ctx) return antwoord(401, { fout: "Log opnieuw in als beheerder van uw organisatie." });
 
+  if (actie === "wachtwoord-zet") {
+    const password = String(body.wachtwoord || "");
+    const zwak = wachtwoordFout(password, [ctx.beheer.voornaam, ctx.beheer.achternaam, ctx.beheer.email, ctx.org.naam]);
+    if (zwak) return antwoord(400, { fout: zwak });
+    const gezet = await client.auth.admin.updateUserById(ctx.user.id, { password });
+    if (gezet.error) return antwoord(400, { fout: gezet.error.message });
+    return antwoord(200, { ok: true });
+  }
+
   if (actie === "ik") {
     return antwoord(200, { naam: `${ctx.beheer.voornaam} ${ctx.beheer.achternaam}`, organisatie: ctx.org.naam, mail: `${ctx.beheer.mail_local}@ambassadeur.boaportaal.nl`, bus: `${ctx.org.slug}@ambassadeur.boaportaal.nl` });
   }
