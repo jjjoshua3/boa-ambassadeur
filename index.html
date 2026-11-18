@@ -52,6 +52,7 @@
     let tab = "mensen";
     let ik = null;
     let mensen = [];
+    let zoekTeam = "";
     let tickets = [];
     let openTicket = null;
     let fout = "";
@@ -112,8 +113,12 @@
           <button class="btn">Uitnodigen</button></form>
           <form id="import" style="margin-top:14px"><label>Excel of CSV: Voornaam, Achternaam, mailadres<input name="bestand" type="file" accept=".xlsx,.xls,.csv" required></label><button class="btn sec">Importeren</button></form>
         </div>
-        <div class="kaart"><table><thead><tr><th>Naam</th><th>Adres</th><th>Status</th><th></th></tr></thead><tbody>
-          ${mensen.map((rij) => `<tr><td><b>${esc(rij.voornaam)} ${esc(rij.achternaam)}</b><br><span>${esc(rij.rol)}</span></td><td>${esc(rij.email)}${rij.client_id ? `<br>${esc(rij.client_id)}` : ""}</td><td>${esc(rij.status)}${rij.locked ? " · vergrendeld" : ""}</td><td>${rij.klaar ? `<button class="btn sec" data-reset="${esc(rij.id)}">Herstelmail</button> <button class="btn sec" data-open="${esc(rij.id)}">Ontgrendelen</button> <button class="btn sec" data-pauze="${esc(rij.id)}">2 staps 8 uur uit</button>` : "Wacht op bevestiging"}</td></tr>`).join("") || `<tr><td colspan="4">Nog niemand.</td></tr>`}
+        <div class="kaart">
+          <h2>Uw team</h2>
+          <p>Zoek iemand van uw organisatie. Is het account bevestigd, dan staat er een wachtwoord-reset. Is het nog niet bevestigd, dan kunt u de uitnodiging opnieuw sturen.</p>
+          <label>Zoeken<input id="zoek-team" value="${esc(zoekTeam)}" placeholder="Naam of mailadres"></label>
+          <table><thead><tr><th>Naam</th><th>Adres</th><th>Status</th><th>Actie</th></tr></thead><tbody>
+          ${(() => { const q = zoekTeam.trim().toLowerCase(); return mensen.filter((rij) => !q || `${rij.voornaam} ${rij.achternaam} ${rij.email} ${rij.client_id || ""}`.toLowerCase().includes(q)); })().map((rij) => `<tr><td><b>${esc(rij.voornaam)} ${esc(rij.achternaam)}</b><br><span>${esc(rij.rol)}</span></td><td>${esc(rij.email)}${rij.client_id ? `<br>${esc(rij.client_id)}` : ""}</td><td>${esc(rij.status)}${rij.locked ? " · vergrendeld" : ""}</td><td>${rij.klaar ? `<button class="btn sec" data-reset="${esc(rij.id)}">Wachtwoord-reset sturen</button> <button class="btn sec" data-open="${esc(rij.id)}">Ontgrendelen</button> <button class="btn sec" data-pauze="${esc(rij.id)}">2 staps 8 uur uit</button>` : `<button class="btn sec" data-opnieuw="${esc(rij.id)}">Uitnodiging opnieuw</button>`}</td></tr>`).join("") || `<tr><td colspan="4">Niemand gevonden.</td></tr>`}
         </tbody></table></div>`;
     }
 
@@ -166,11 +171,22 @@
         } catch (err) { fout = err.message; }
         teken();
       });
-      document.querySelectorAll("[data-reset],[data-open],[data-pauze]").forEach((knoop) => knoop.addEventListener("click", async () => {
-        const actie = knoop.dataset.reset ? "reset" : knoop.dataset.open ? "ontgrendel" : "pauze";
-        const id = knoop.dataset.reset || knoop.dataset.open || knoop.dataset.pauze;
+      document.getElementById("zoek-team")?.addEventListener("input", (e) => {
+        zoekTeam = e.target.value;
+        const plek = e.target.selectionStart;
+        teken();
+        const veld = document.getElementById("zoek-team");
+        if (veld) { veld.focus(); veld.selectionStart = veld.selectionEnd = plek; }
+      });
+      document.querySelectorAll("[data-reset],[data-open],[data-pauze],[data-opnieuw]").forEach((knoop) => knoop.addEventListener("click", async () => {
+        const actie = knoop.dataset.reset ? "reset" : knoop.dataset.open ? "ontgrendel" : knoop.dataset.pauze ? "pauze" : "opnieuw";
+        const id = knoop.dataset.reset || knoop.dataset.open || knoop.dataset.pauze || knoop.dataset.opnieuw;
         fout = ""; melding = "";
-        try { await api({ actie, id }); melding = "Gedaan en gelogd als opvraag door de eigen werkgever."; await laad(); }
+        try {
+          await api({ actie, id });
+          melding = actie === "reset" ? "Wachtwoord-reset is verstuurd." : actie === "opnieuw" ? "Uitnodiging is opnieuw verstuurd." : "Gedaan en gelogd als opvraag door de eigen werkgever.";
+          await laad();
+        }
         catch (err) { fout = err.message; }
         teken();
       }));

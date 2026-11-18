@@ -425,6 +425,15 @@ export async function handler(event) {
     return antwoord(200, { ok: true });
   }
 
+  if (actie === "opnieuw") {
+    const { data: lid } = await client.from("boa_org_lid").select("*").eq("id", body.id).eq("organisatie_id", ctx.org.id).maybeSingle();
+    if (!lid) return antwoord(404, { fout: "Deze persoon hoort niet bij uw organisatie." });
+    if (lid.status !== "uitgenodigd") return antwoord(400, { fout: "Dit account is al bevestigd. Stuur een wachtwoord-reset." });
+    const uit = await nodigUit(client, ctx, lid);
+    if (uit.fout) return antwoord(400, { fout: uit.fout });
+    return antwoord(uit.mail ? 200 : 502, uit.mail ? { ok: true } : { fout: uit.mailFout || "De uitnodiging is niet verstuurd." });
+  }
+
   if (actie === "reset" || actie === "ontgrendel" || actie === "pauze") {
     const { data: lid } = await client.from("boa_org_lid").select("*").eq("id", body.id).eq("organisatie_id", ctx.org.id).maybeSingle();
     if (!lid || !lid.user_id || lid.status === "uitgenodigd") return antwoord(404, { fout: "Dit account is nog niet bevestigd." });
